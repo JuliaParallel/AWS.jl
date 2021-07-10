@@ -31,37 +31,28 @@ const THROTTLING_ERROR_CODES = (
         "PriorRequestNotComplete"
     )
 
-struct DownloadsStatusError <: Exception
-    status::Int16
-    response::Downloads.Response
-end
+abstract type AbstractBackend end
+struct HTTPBackend <: AbstractBackend end
+struct DownloadsBackend <: AbstractBackend end
 
-struct HTTPBackend end
-struct DownloadsBackend end
-default_backend() = DownloadsBackend()
+default_backend() = HTTPBackend()
 
 submit_request(aws::AbstractAWSConfig, request::Request; return_headers::Bool=false) = submit_request(default_backend(), aws, request; return_headers)
 
-function submit_request(::DownloadsBackend, aws::AbstractAWSConfig, request::Request; return_headers::Bool=false)
-    request.headers["User-Agent"] = user_agent[]
-    request.headers["Host"] = HTTP.URI(request.url).host
-    credentials(aws) === nothing || sign!(aws, request)
-    
+function _http_request(::DownloadsBackend, request)
+    output = IOBuffer()
+    input = IOBuffer()
+    write(input, request.content)
 
-    if response.status in REDIRECT_ERROR_CODES
-        location = get(response.headers, "Location", "")
-        if location != ""
-            request.url = location
-        else
-            e = DownloadsStatusError(response.status, response)
-            throw(AWSException(e))
-        end
-    end
-    if response.status != 200
-        error("WIP error message: response.status = $(response.status)")
+    response = Downloads.request(request.url; input, output, method = request.request_method, request.headers, verbose=false, throw=true, request.downloader)
+
+    http_response = HTTP.Response(response.status, response.headers; body=take!(output), request=nothing) 
+
+    if HTTP.iserror(http_response)
+        throw(HTTP.StatusError(http_response.status, http_response))
     end
 
-    return take!(output)
+    return http_response
 end
 
 
@@ -80,7 +71,7 @@ Submit the request to AWS.
 # Returns
 - `Tuple or Dict`: Tuple if returning_headers, otherwise just return a Dict of the response body
 """
-function submit_request(::HTTPBackend, aws::AbstractAWSConfig, request::Request; return_headers::Bool=false)
+function submit_request(backend::AbstractBackend, aws::AbstractAWSConfig, request::Request; return_headers::Bool=false)
     response = nothing
 
     request.headers["User-Agent"] = user_agent[]
@@ -89,7 +80,7 @@ function submit_request(::HTTPBackend, aws::AbstractAWSConfig, request::Request;
     @repeat 3 try
         credentials(aws) === nothing || sign!(aws, request)
 
-        response = @mock _http_request(request)
+        response = @mock _http_request(backend, request)
 
         if response.status in REDIRECT_ERROR_CODES
             if HTTP.header(response, "Location") != ""
@@ -176,7 +167,7 @@ function submit_request(::HTTPBackend, aws::AbstractAWSConfig, request::Request;
 end
 
 
-function _http_request(request::Request)
+function _http_request(::HTTPBackend, request::Request)
     @repeat 4 try
         http_stack = HTTP.stack(redirect=false, retry=false, aws_authorization=false)
 
