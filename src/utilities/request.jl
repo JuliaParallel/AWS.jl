@@ -16,21 +16,6 @@ Base.@kwdef mutable struct Request
     downloader::Union{Nothing, Downloads.Downloader}=nothing
 end
 
-const TOO_MANY_REQUESTS = 429
-const EXPIRED_ERROR_CODES = ("ExpiredToken", "ExpiredTokenException", "RequestExpired")
-const REDIRECT_ERROR_CODES = (301, 302, 303, 304, 305, 307, 308)
-const THROTTLING_ERROR_CODES = (
-        "Throttling",
-        "ThrottlingException",
-        "ThrottledException",
-        "RequestThrottledException",
-        "TooManyRequestsException",
-        "ProvisionedThroughputExceededException",
-        "LimitExceededException",
-        "RequestThrottled",
-        "PriorRequestNotComplete"
-    )
-
 abstract type AbstractBackend end
 struct HTTPBackend <: AbstractBackend end
 struct DownloadsBackend <: AbstractBackend end
@@ -73,6 +58,20 @@ Submit the request to AWS.
 """
 function submit_request(backend::AbstractBackend, aws::AbstractAWSConfig, request::Request; return_headers::Bool=false)
     response = nothing
+    TOO_MANY_REQUESTS = 429
+    EXPIRED_ERROR_CODES = ["ExpiredToken", "ExpiredTokenException", "RequestExpired"]
+    REDIRECT_ERROR_CODES = [301, 302, 303, 304, 305, 307, 308]
+    THROTTLING_ERROR_CODES = [
+        "Throttling",
+        "ThrottlingException",
+        "ThrottledException",
+        "RequestThrottledException",
+        "TooManyRequestsException",
+        "ProvisionedThroughputExceededException",
+        "LimitExceededException",
+        "RequestThrottled",
+        "PriorRequestNotComplete"
+    ]
 
     request.headers["User-Agent"] = user_agent[]
     request.headers["Host"] = HTTP.URI(request.url).host
