@@ -13,6 +13,55 @@ Base.@kwdef mutable struct Request
     http_options::AbstractDict{Symbol,<:Any}=LittleDict{Symbol,String}()
     return_raw::Bool=false
     response_dict_type::Type{<:AbstractDict}=LittleDict
+    downloader::Union{Nothing, Downloads.Downloader}=nothing
+end
+
+const TOO_MANY_REQUESTS = 429
+const EXPIRED_ERROR_CODES = ("ExpiredToken", "ExpiredTokenException", "RequestExpired")
+const REDIRECT_ERROR_CODES = (301, 302, 303, 304, 305, 307, 308)
+const THROTTLING_ERROR_CODES = (
+        "Throttling",
+        "ThrottlingException",
+        "ThrottledException",
+        "RequestThrottledException",
+        "TooManyRequestsException",
+        "ProvisionedThroughputExceededException",
+        "LimitExceededException",
+        "RequestThrottled",
+        "PriorRequestNotComplete"
+    )
+
+struct DownloadsStatusError <: Exception
+    status::Int16
+    response::Downloads.Response
+end
+
+struct HTTPBackend end
+struct DownloadsBackend end
+default_backend() = DownloadsBackend()
+
+submit_request(aws::AbstractAWSConfig, request::Request; return_headers::Bool=false) = submit_request(default_backend(), aws, request; return_headers)
+
+function submit_request(::DownloadsBackend, aws::AbstractAWSConfig, request::Request; return_headers::Bool=false)
+    request.headers["User-Agent"] = user_agent[]
+    request.headers["Host"] = HTTP.URI(request.url).host
+    credentials(aws) === nothing || sign!(aws, request)
+    
+
+    if response.status in REDIRECT_ERROR_CODES
+        location = get(response.headers, "Location", "")
+        if location != ""
+            request.url = location
+        else
+            e = DownloadsStatusError(response.status, response)
+            throw(AWSException(e))
+        end
+    end
+    if response.status != 200
+        error("WIP error message: response.status = $(response.status)")
+    end
+
+    return take!(output)
 end
 
 
@@ -31,22 +80,8 @@ Submit the request to AWS.
 # Returns
 - `Tuple or Dict`: Tuple if returning_headers, otherwise just return a Dict of the response body
 """
-function submit_request(aws::AbstractAWSConfig, request::Request; return_headers::Bool=false)
+function submit_request(::HTTPBackend, aws::AbstractAWSConfig, request::Request; return_headers::Bool=false)
     response = nothing
-    TOO_MANY_REQUESTS = 429
-    EXPIRED_ERROR_CODES = ["ExpiredToken", "ExpiredTokenException", "RequestExpired"]
-    REDIRECT_ERROR_CODES = [301, 302, 303, 304, 305, 307, 308]
-    THROTTLING_ERROR_CODES = [
-        "Throttling",
-        "ThrottlingException",
-        "ThrottledException",
-        "RequestThrottledException",
-        "TooManyRequestsException",
-        "ProvisionedThroughputExceededException",
-        "LimitExceededException",
-        "RequestThrottled",
-        "PriorRequestNotComplete"
-    ]
 
     request.headers["User-Agent"] = user_agent[]
     request.headers["Host"] = HTTP.URI(request.url).host
