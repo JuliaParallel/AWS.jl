@@ -20,7 +20,7 @@ abstract type AbstractBackend end
 struct HTTPBackend <: AbstractBackend end
 struct DownloadsBackend <: AbstractBackend end
 
-default_backend() = HTTPBackend()
+default_backend() = DownloadsBackend()
 
 submit_request(aws::AbstractAWSConfig, request::Request; return_headers::Bool=false) = submit_request(default_backend(), aws, request; return_headers)
 
