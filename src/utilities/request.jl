@@ -2,7 +2,7 @@ abstract type AbstractBackend end
 struct HTTPBackend <: AbstractBackend end
 struct DownloadsBackend <: AbstractBackend end
 
-default_backend() = DownloadsBackend()
+default_backend() = DEFAULT_BACKEND[]
 
 Base.@kwdef mutable struct Request
     service::String
@@ -27,6 +27,7 @@ submit_request(aws::AbstractAWSConfig, request::Request; return_headers::Bool=fa
 
 const AWS_DOWNLOADER = Ref{Union{Nothing, Downloader}}(nothing)
 const AWS_DOWNLOAD_LOCK = ReentrantLock()
+const DEFAULT_BACKEND = Ref{AbstractBackend}(DownloadsBackend())
 
 # https://github.com/JuliaLang/Downloads.jl/blob/84e948c02b8a0625552a764bf90f7d2ee97c949c/src/Downloads.jl#L293-L301
 function get_downloader(downloader=nothing)
