@@ -25,16 +25,45 @@ default_backend() = DownloadsBackend()
 submit_request(aws::AbstractAWSConfig, request::Request; return_headers::Bool=false) = submit_request(default_backend(), aws, request; return_headers)
 
 function _http_request(::DownloadsBackend, request)
-    output = IOBuffer()
-    input = IOBuffer()
-    write(input, request.content)
+    # If we pass `output`, Downloads.jl will expect a message
+    # body in the response. Specifically, it sets
+    # <https://curl.se/libcurl/c/CURLOPT_NOBODY.html>
+    # only when we do not pass the `output` argument.
+    #
+    # When the method is `HEAD`, the response may have a Content-Length
+    # but not send any content back (which appears to be correct,
+    # <https://stackoverflow.com/a/18925736/12486544>).
+    # 
+    # Thus, if we did not set `CURLOPT_NOBODY`, and it gets a Content-Length
+    # back, it will hang waiting for that body.
+    # 
+    # Therefore, we do not pass an `output` when the `request_method` is `HEAD`.
+    if request.request_method != "HEAD"
+        output = IOBuffer()
+        output_arg = (; output=output)
 
-    response = Downloads.request(request.url; input, output,
+        # We set a callback so later on we know how to get the `body` back.
+        body_arg = () -> (; body = take!(output))
+    else
+        output_arg = NamedTuple()
+        body_arg = () -> NamedTuple()
+    end
+
+    # We pass an `input` only when we have content we wish to send.
+    if !isempty(request.content)
+        input = IOBuffer()
+        write(input, request.content)
+        input_arg = (; input=input)
+    else
+        input_arg = NamedTuple()
+    end
+
+    response = Downloads.request(request.url; input_arg..., output_arg...,
                                  method = request.request_method,
                                  request.headers, verbose=false, throw=true,
                                  request.downloader)
 
-    http_response = HTTP.Response(response.status, response.headers; body=take!(output), request=nothing) 
+    http_response = HTTP.Response(response.status, response.headers; body_arg()..., request=nothing) 
 
     if HTTP.iserror(http_response)
         throw(HTTP.StatusError(http_response.status, http_response))
