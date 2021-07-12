@@ -84,7 +84,7 @@ function _http_request(::DownloadsBackend, request)
 
     response = Downloads.request(request.url; input_arg..., output_arg...,
                                  method = request.request_method,
-                                 request.headers, verbose=true, throw=true,
+                                 request.headers, verbose=false, throw=true,
                                  downloader)
     http_response = HTTP.Response(response.status, response.headers; body_arg()..., request=nothing) 
 
