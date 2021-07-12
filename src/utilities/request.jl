@@ -66,7 +66,8 @@ function _http_request(::DownloadsBackend, request)
     http_response = HTTP.Response(response.status, response.headers; body_arg()..., request=nothing) 
 
     if HTTP.iserror(http_response)
-        throw(HTTP.StatusError(http_response.status, http_response))
+        target = HTTP.resource(HTTP.URI(request.url))
+        throw(HTTP.StatusError(http_response.status, request.request_method, target, http_response))
     end
 
     return http_response
