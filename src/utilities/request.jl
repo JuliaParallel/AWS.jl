@@ -1,3 +1,9 @@
+abstract type AbstractBackend end
+struct HTTPBackend <: AbstractBackend end
+struct DownloadsBackend <: AbstractBackend end
+
+default_backend() = DownloadsBackend()
+
 Base.@kwdef mutable struct Request
     service::String
     api_version::String
@@ -14,15 +20,10 @@ Base.@kwdef mutable struct Request
     return_raw::Bool=false
     response_dict_type::Type{<:AbstractDict}=LittleDict
     downloader::Union{Nothing, Downloads.Downloader}=nothing
+    backend::AbstractBackend=default_backend()
 end
 
-abstract type AbstractBackend end
-struct HTTPBackend <: AbstractBackend end
-struct DownloadsBackend <: AbstractBackend end
-
-default_backend() = DownloadsBackend()
-
-submit_request(aws::AbstractAWSConfig, request::Request; return_headers::Bool=false) = submit_request(default_backend(), aws, request; return_headers)
+submit_request(aws::AbstractAWSConfig, request::Request; return_headers::Bool=false) = submit_request(request.backend, aws, request; return_headers)
 
 const AWS_DOWNLOADER = Ref{Union{Nothing, Downloader}}(nothing)
 const AWS_DOWNLOAD_LOCK = ReentrantLock()

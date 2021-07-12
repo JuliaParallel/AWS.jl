@@ -69,6 +69,7 @@ function _extract_common_kw_args(service, args)
         http_options=_pop!(args, "http_options", LittleDict{Symbol, String}()),
         response_dict_type=_pop!(args, "response_dict_type", LittleDict),
         downloader=_pop!(args, "downloader", nothing),
+        backend=_pop!(args, "backend", default_backend()),
     )
 end
 
