@@ -3,6 +3,7 @@ module AWS
 using Compat: Compat, @something
 using Base64
 using Dates
+using Downloads: Downloads, Downloader, Curl
 using HTTP
 using MbedTLS
 using Mocking
