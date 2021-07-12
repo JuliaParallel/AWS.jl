@@ -24,6 +24,23 @@ default_backend() = DownloadsBackend()
 
 submit_request(aws::AbstractAWSConfig, request::Request; return_headers::Bool=false) = submit_request(default_backend(), aws, request; return_headers)
 
+const AWS_DOWNLOADER = Ref{Union{Nothing, Downloader}}(nothing)
+const AWS_DOWNLOAD_LOCK = ReentrantLock()
+
+# https://github.com/JuliaLang/Downloads.jl/blob/84e948c02b8a0625552a764bf90f7d2ee97c949c/src/Downloads.jl#L293-L301
+function get_downloader(downloader=nothing)
+    lock(AWS_DOWNLOAD_LOCK) do
+        yield() # let other downloads finish
+        downloader isa Downloader && return
+        while true
+            downloader = AWS_DOWNLOADER[]
+            downloader isa Downloader && return
+            AWS_DOWNLOADER[] = Downloader()
+        end
+    end
+    return downloader
+end
+
 function _http_request(::DownloadsBackend, request)
     # If we pass `output`, Downloads.jl will expect a message
     # body in the response. Specifically, it sets
@@ -58,11 +75,15 @@ function _http_request(::DownloadsBackend, request)
         input_arg = NamedTuple()
     end
 
+    downloader = @something(request.downloader, get_downloader())
+    # set the hook so that we don't follow redirects
+    downloader.easy_hook = (easy, info) -> Curl.setopt(easy, Curl.CURLOPT_FOLLOWLOCATION, false)
+
+
     response = Downloads.request(request.url; input_arg..., output_arg...,
                                  method = request.request_method,
-                                 request.headers, verbose=false, throw=true,
-                                 request.downloader)
-
+                                 request.headers, verbose=true, throw=true,
+                                 downloader)
     http_response = HTTP.Response(response.status, response.headers; body_arg()..., request=nothing) 
 
     if HTTP.iserror(http_response)
