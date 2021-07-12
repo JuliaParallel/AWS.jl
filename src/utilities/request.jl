@@ -29,7 +29,10 @@ function _http_request(::DownloadsBackend, request)
     input = IOBuffer()
     write(input, request.content)
 
-    response = Downloads.request(request.url; input, output, method = request.request_method, request.headers, verbose=false, throw=true, request.downloader)
+    response = Downloads.request(request.url; input, output,
+                                 method = request.request_method,
+                                 request.headers, verbose=false, throw=true,
+                                 request.downloader)
 
     http_response = HTTP.Response(response.status, response.headers; body=take!(output), request=nothing) 
 
