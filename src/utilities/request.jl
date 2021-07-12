@@ -77,23 +77,24 @@ function _http_request(::DownloadsBackend, request)
         input_arg = NamedTuple()
     end
 
-    downloader = @something(request.downloader, get_downloader())
-    # set the hook so that we don't follow redirects
-    downloader.easy_hook = (easy, info) -> Curl.setopt(easy, Curl.CURLOPT_FOLLOWLOCATION, false)
+    @repeat 4 try
+        downloader = @something(request.downloader, get_downloader())
+        # set the hook so that we don't follow redirects
+        downloader.easy_hook = (easy, info) -> Curl.setopt(easy, Curl.CURLOPT_FOLLOWLOCATION, false)
+        response = Downloads.request(request.url; input_arg..., output_arg...,
+                                    method = request.request_method,
+                                    request.headers, verbose=false, throw=true,
+                                    downloader)
+        http_response = HTTP.Response(response.status, response.headers; body_arg()..., request=nothing) 
 
-
-    response = Downloads.request(request.url; input_arg..., output_arg...,
-                                 method = request.request_method,
-                                 request.headers, verbose=false, throw=true,
-                                 downloader)
-    http_response = HTTP.Response(response.status, response.headers; body_arg()..., request=nothing) 
-
-    if HTTP.iserror(http_response)
-        target = HTTP.resource(HTTP.URI(request.url))
-        throw(HTTP.StatusError(http_response.status, request.request_method, target, http_response))
+        if HTTP.iserror(http_response)
+            target = HTTP.resource(HTTP.URI(request.url))
+            throw(HTTP.StatusError(http_response.status, request.request_method, target, http_response))
+        end
+        return http_response
+    catch e
+        @delay_retry if (isa(e, HTTP.StatusError) && _http_status(e) >= 500) end
     end
-
-    return http_response
 end
 
 
